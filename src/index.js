@@ -1,6 +1,10 @@
 const amqp = require('amqplib/callback_api');
 const work = require('./index.process');
 
+if(!process.env.CLOUDAMQP_URL) {
+  throw new Error('CLOUDAMQP_URL environment variable is not defined.');
+}
+
 // if the connection is closed or fails to be established at all, we will reconnect
 let amqpConn = null;
 const start = () => {
@@ -36,7 +40,7 @@ const whenConnected = () => {
 function startWorker() {
   amqpConn.createChannel(function(err, ch) {
     if (closeOnErr(err)) return;
-    
+
     ch.on('error', function(err) {
       console.error('[AMQP] channel error', err.message);
     });
