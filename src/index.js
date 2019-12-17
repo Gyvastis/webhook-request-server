@@ -36,6 +36,7 @@ const whenConnected = () => {
 function startWorker() {
   amqpConn.createChannel(function(err, ch) {
     if (closeOnErr(err)) return;
+    
     ch.on('error', function(err) {
       console.error('[AMQP] channel error', err.message);
     });

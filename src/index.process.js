@@ -1,4 +1,6 @@
 const fetch = require('node-fetch');
+const Promise = require('bluebird');
+fetch.Promise = Promise;
 
 const buildRequestOptions = request => {
   let requestOptions = {
