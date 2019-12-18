@@ -2,8 +2,6 @@ FROM arm32v7/node:alpine
 
 RUN npm -g i forever
 
-ENV CLOUDAMQP_URL empty
-
 WORKDIR /app
 COPY ./ ./
 
