@@ -5,57 +5,72 @@ if(!process.env.CLOUDAMQP_URL) {
   throw new Error('CLOUDAMQP_URL environment variable is not defined.');
 }
 
-// if the connection is closed or fails to be established at all, we will reconnect
+const exchange = 'webhook';
+const requestQueue = 'webhook_request';
+
 let amqpConn = null;
 const start = () => {
-  amqp.connect(process.env.CLOUDAMQP_URL + '?heartbeat=60', function(err, conn) {
+  amqp.connect(process.env.CLOUDAMQP_URL + '?heartbeat=60', (err, conn) => {
     if (err) {
       console.error('[AMQP]', err.message);
       return setTimeout(start, 1000);
     }
 
-    conn.on('error', function(err) {
+    conn.on('error', err => {
       if (err.message !== 'Connection closing') {
         console.error('[AMQP] conn error', err.message);
       }
     });
 
-    conn.on('close', function() {
+    conn.on('close', () => {
       console.error('[AMQP] reconnecting');
       return setTimeout(start, 1000);
     });
 
     console.log('[AMQP] connected');
-
     amqpConn = conn;
-
     whenConnected();
   });
 }
 
 const whenConnected = () => {
   startWorker();
+  startPublisher();
 }
 
-function startWorker() {
-  amqpConn.createChannel(function(err, ch) {
+let pubChannel = null;
+const startPublisher = () => {
+  amqpConn.createConfirmChannel((err, ch) => {
     if (closeOnErr(err)) return;
-
-    ch.on('error', function(err) {
+      ch.on('error', err => {
       console.error('[AMQP] channel error', err.message);
     });
 
-    ch.on('close', function() {
+    ch.on('close', () => {
+      console.log('[AMQP] channel closed');
+    });
+
+    console.log('Publisher is started');
+    pubChannel = ch;
+  });
+}
+
+const startWorker = () => {
+  amqpConn.createChannel((err, ch) => {
+    if (closeOnErr(err)) return;
+
+    ch.on('error', err => {
+      console.error('[AMQP] channel error', err.message);
+    });
+
+    ch.on('close', () => {
       console.log('[AMQP] channel closed');
     });
 
     ch.prefetch(10);
-
-    ch.assertQueue('webhook_request', { durable: true }, function(err, _ok) {
+    ch.assertQueue(requestQueue, { durable: true }, err => {
       if (closeOnErr(err)) return;
-
-      ch.consume('webhook_request', processMsg, { noAck: false });
-
+      ch.consume(requestQueue, processMsg, { noAck: false });
       console.log('Worker is started');
     });
 
@@ -71,6 +86,12 @@ function startWorker() {
         } catch (e) {
           closeOnErr(e);
         }
+      }, (routingKey, content) => {
+        pubChannel.publish(exchange, routingKey, Buffer.from(content), { persistent: true }, (err, ok) => {
+          if (!err) return;
+          console.error('[AMQP] publish', err);
+          pubChannel.connection.close();
+        });
       });
     }
   });
@@ -80,7 +101,6 @@ const closeOnErr = err => {
   if (!err) return false;
 
   console.error('[AMQP] error', err);
-
   amqpConn.close();
 
   return true;

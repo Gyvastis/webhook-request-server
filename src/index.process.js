@@ -15,10 +15,10 @@ const buildRequestOptions = request => {
   return requestOptions;
 }
 
-module.exports = (msg, cb) => {
+module.exports = (msg, cb, publishResponse) => {
   console.log('Got msg ', msg.content.toString());
 
-  const { request, response } = JSON.parse(msg.content.toString());
+  const { request, response, requeue } = JSON.parse(msg.content.toString());
   console.log(request)
 
   try {
@@ -27,7 +27,20 @@ module.exports = (msg, cb) => {
     .then(data => {
       console.log('Response', data);
 
-      // todo: call the webhook in $response
+      if(requeue) {
+        console.log('Requeue', data);
+        publishResponse(requeue.routingKey, data);
+      }
+      else {
+        fetch(response.url, buildRequestOptions({
+          ...response,
+          body: data
+        }))
+        .then(res => res.text())
+        .then(data => {
+          console.log('Webhook', data);
+        })
+      }
     })
 
     cb(true);
