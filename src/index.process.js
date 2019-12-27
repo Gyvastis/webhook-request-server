@@ -1,4 +1,10 @@
 const fetch = require('node-fetch');
+const proxyAgents = {
+  http: require('http-proxy-agent'),
+  https: require('https-proxy-agent'),
+  socks4: require('socks-proxy-agent'),
+  socks5: require('socks-proxy-agent'),
+};
 const Promise = require('bluebird');
 fetch.Promise = Promise;
 
@@ -6,7 +12,12 @@ const buildRequestOptions = request => {
   let requestOptions = {
     method: request.method,
     headers: request.headers,
+    timeout: request.timeout ?: 10000,
   };
+
+  if(request.proxy) {
+    requestOptions.agent = new proxyAgents[request.proxy.protocol](`${request.proxy.protocol}://${request.proxy.ip}:${request.proxy.port}`);
+  }
 
   if(!['GET', 'HEAD'].includes(request.method)) {
     requestOptions.body = request.body;
